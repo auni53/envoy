@@ -19,7 +19,22 @@ Http::Code ListenersHandler::handlerDrainListeners(absl::string_view url, Http::
   ListenerManager::StopListenersType stop_listeners_type =
       params.find("inboundonly") != params.end() ? ListenerManager::StopListenersType::InboundOnly
                                                  : ListenerManager::StopListenersType::All;
-  server_.listenerManager().stopListeners(stop_listeners_type);
+
+  bool graceful = params.find("graceful") != params.end();
+  bool force = params.find("force") != params.end();
+  if (graceful) {
+    if (force) {
+      server_.drainManager().startDrainSequence([] {});
+      server_.listenerManager().stopListeners(stop_listeners_type);
+    } else {
+      server_.drainManager().startDrainSequence([this, stop_listeners_type]() {
+        server_.listenerManager().stopListeners(stop_listeners_type);
+      });
+    }
+  } else {
+    std::cerr << "[AUNI] " << "stopping listeners" << "\n";
+    server_.listenerManager().stopListeners(stop_listeners_type);
+  }
   response.add("OK\n");
   return Http::Code::OK;
 }
